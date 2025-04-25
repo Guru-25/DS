@@ -1,0 +1,129 @@
+import nltk
+from nltk.tokenize import word_tokenize
+import string
+import pandas as pd
+from textblob import TextBlob
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics import classification_report,accuracy_score,confusion_matrix,ConfusionMatrixDisplay
+from sklearn.metrics.pairwise import cosine_similarity
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger_eng')
+nltk.download('stopwords')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
+
+df=pd.read_csv('spam.csv',encoding='latin1')
+print(df.head())
+print(df.describe())
+
+lemmatizer=WordNetLemmatizer()
+stop_words=set(stopwords.words('english'))
+
+def tokenize(text):
+    tokens=word_tokenize(text.lower())
+    clean_tokens=[
+        lemmatizer.lemmatize(word)
+        for word in tokens
+        if word.isalpha and word not in stop_words and word not in string.punctuation
+    ]
+    return clean_tokens
+
+df['tokens']=df['v2'].apply(tokenize)
+print(df[['tokens']])
+
+df['parts']=df['tokens'].apply(nltk.pos_tag)
+print(df[['parts']])
+
+def get_sentiment(text):
+    blob=TextBlob(text)
+    return blob.sentiment.polarity
+
+df['sentiment']=df['v2'].apply(get_sentiment)
+print(df[['v2','sentiment']])
+
+all_words=' '.join([' '.join(token) for token in df['tokens']])
+wordcloud=WordCloud(width=400,height=200, background_color='white').generate(all_words)
+
+plt.figure(figsize=(5,6))
+plt.imshow(wordcloud,interpolation='bilinear')
+plt.axis('off')
+plt.title('Word Cloud')
+plt.show()
+
+df['clean_text']=df['tokens'].apply(lambda tokens:' '.join(tokens))
+
+X=df['clean_text']
+y=df['v1']
+X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2,random_state=42)
+
+vectorizer=TfidfVectorizer()
+X_train_tfidf=vectorizer.fit_transform(X_train)
+X_test_tfidf=vectorizer.transform(X_test)
+
+model=MultinomialNB()
+model.fit(X_train_tfidf,y_train)
+y_pred=model.predict(X_test_tfidf)
+
+print("Classification report:",classification_report(y_test,y_pred))
+print("Accuracy:",accuracy_score(y_test,y_pred))
+
+cm=confusion_matrix(y_test,y_pred,labels=['ham','spam'])
+disp=ConfusionMatrixDisplay(confusion_matrix=cm,display_labels=['ham','spam'])
+disp.plot(cmap=plt.cm.Blues)
+plt.title('Confusion Matrix')
+plt.show()
+
+custom_msg=['Congratulations! You have won a free ticket and it is only available for a limited time']
+custom_msg_tfidf=vectorizer.transform(custom_msg)
+custom_pred=model.predict(custom_msg_tfidf)
+
+print("Custom Message:",custom_msg[0])
+print("predicted Label",custom_pred[0])
+
+with open('sample3.txt','r',encoding='utf-8') as file:
+    text1=file.read()
+with open('sample2.txt','r',encoding='utf-8') as file:
+    text2=file.read()
+
+tfidf_matrix=vectorizer.fit_transform([text1,text2])
+similarity=cosine_similarity(tfidf_matrix[0:1],tfidf_matrix[1:2])
+
+print("The cosine similarity between 2 documents are ",similarity[0][0])
+print(f"The cosine similarity between 2 documents are {similarity[0][0]:.2f}")
+
+with open('short_story.txt','r',encoding='utf-8') as file:
+    text3=file.read()
+with open('short_story2.txt','r',encoding='utf-8') as file:
+    text4=file.read()
+
+tokens_text3=tokenize(text3)
+print("Tokens of short story 1: ",tokens_text3)
+tokens_text4=tokenize(text4)
+print("Tokens of short story 2: ",tokens_text4)
+
+pos_values3=nltk.pos_tag(tokens_text3)
+print("POS tagging: ",pos_values3)
+
+sentiment_values3=get_sentiment(text3)
+print("Sentiment values: ",sentiment_values3)
+
+word_cloud3=WordCloud(width=400,height=200,background_color='white').generate(text3)
+plt.imshow(word_cloud3,interpolation='bilinear')
+plt.plot(figsize=(5,6))
+plt.axis('off')
+plt.title('Word Cloud of a short story')
+plt.show()
+
+print("\nSimilar words\n")
+tokens_text3=set(tokens_text3)
+tokens_text4=set(tokens_text4)
+common_words=tokens_text3.intersection(tokens_text4)
+for word in common_words:
+    print(word,end='\t')
